@@ -9,9 +9,12 @@ PORT="${PORT:-18080}"
 URL="http://127.0.0.1:${PORT}"
 
 # .llamafile is an APE binary; on Linux the kernel may refuse direct exec, so
-# launch via sh — the file's shell prelude bootstraps it (matches process.rs).
-sh "${LLAMAFILE}" --server --port "${PORT}" --nobrowser \
-  --embedding -ub 8192 -b 8192 -c 8192 >/tmp/llamafile.smoke.log 2>&1 &
+# launch via sh — the file's shell prelude bootstraps it.
+# --gpu disable forces CPU: CI runners ship a Vulkan loader but no usable GPU,
+# and llamafile otherwise aborts at vk::createInstance. We pass nothing else —
+# the embedded .args already supplies -m, --embedding and the batch sizes, so a
+# bare launch here also proves .args was packaged correctly.
+sh "${LLAMAFILE}" --server --port "${PORT}" --gpu disable >/tmp/llamafile.smoke.log 2>&1 &
 SERVER_PID=$!
 cleanup() { kill "${SERVER_PID}" 2>/dev/null || true; wait "${SERVER_PID}" 2>/dev/null || true; }
 trap cleanup EXIT
