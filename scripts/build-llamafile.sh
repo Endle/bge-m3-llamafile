@@ -79,9 +79,15 @@ chmod +x "${LLAMAFILE_BIN}" "${ZIPALIGN_BIN}"
 echo "== [6/6] package -> ${DIST}/${OUTPUT_NAME} =="
 OUT="${DIST}/${OUTPUT_NAME}"
 cp "${LLAMAFILE_BIN}" "${OUT}"
+# Embedded .args = the model reference + the runtime flags from ./.args.
+# llamafile ALWAYS applies these defaults (resolving -m against /zip/ by
+# basename) and splices a caller's own CLI args in at the `...` line. The model
+# name is derived from QUANT so it can't drift from what we actually packaged.
+PACKAGED_ARGS="${WORK}/.args"
+{ printf -- '-m\n%s\n' "$(basename "${Q_GGUF}")"; cat "${ROOT}/.args"; } > "${PACKAGED_ARGS}"
 # -j0 stores the GGUF uncompressed and page-aligned so llamafile mmaps it
-# instead of copying ~438 MB into RAM. Order matters: weights then .args.
-"${ZIPALIGN_BIN}" -j0 "${OUT}" "${Q_GGUF}" "${ROOT}/.args"
+# instead of copying it into RAM. Order matters: weights then .args.
+"${ZIPALIGN_BIN}" -j0 "${OUT}" "${Q_GGUF}" "${PACKAGED_ARGS}"
 chmod +x "${OUT}"
 
 sha256sum "${OUT}" | awk '{print $1}' > "${OUT}.sha256"
