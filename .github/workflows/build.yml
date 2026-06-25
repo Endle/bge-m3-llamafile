@@ -1,0 +1,69 @@
+name: Build bge-m3.llamafile
+
+# Manual only — releases are deliberate.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build + smoke-test only; upload as a workflow artifact, do NOT publish a Release."
+        type: boolean
+        default: true
+      release_tag:
+        description: "Release tag to publish under (required when dry_run is false). e.g. embed-bge-m3-v1"
+        type: string
+        default: ""
+
+permissions:
+  contents: write      # create the Release
+  id-token: write      # build-provenance attestation (SLSA)
+  attestations: write  # build-provenance attestation
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard release inputs
+        if: ${{ inputs.dry_run == false && inputs.release_tag == '' }}
+        run: |
+          echo "release_tag is required when dry_run is false" >&2
+          exit 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential jq curl
+
+      - name: Build bge-m3.llamafile
+        run: bash scripts/build-llamafile.sh
+
+      - name: Smoke test (1024-dim embedding)
+        run: bash scripts/smoke-test.sh dist/bge-m3.llamafile
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/bge-m3.llamafile
+
+      # dry_run: keep it as a workflow artifact for inspection, no Release.
+      - name: Upload workflow artifact
+        if: ${{ inputs.dry_run == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bge-m3-llamafile
+          path: |
+            dist/bge-m3.llamafile
+            dist/bge-m3.llamafile.sha256
+
+      # real run: publish to a GitHub Release.
+      - name: Publish Release
+        if: ${{ inputs.dry_run == false }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: |
+            dist/bge-m3.llamafile
+            dist/bge-m3.llamafile.sha256
